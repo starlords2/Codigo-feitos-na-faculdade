@@ -1,0 +1,59 @@
+#include <iostream>
+#include <thread>
+#include <chrono>
+#include <mutex>
+#include <condition_variable>
+
+std::mutex mtx;
+std::condition_variable cv;
+bool rua1_verde = true; // Rua 1 começa com o semáforo verde
+
+void mudarcores(const std::string& rua, const std::string& color, int duration) {
+    std::this_thread::sleep_for(std::chrono::seconds(duration)); 
+    std::lock_guard<std::mutex> lock(mtx); 
+    std::cout << rua << ": A cor do semáforo agora é " << color << std::endl;
+}
+
+void Rua1() {
+    while (true) {
+        std::unique_lock<std::mutex> lock(mtx);
+        cv.wait(lock, [] { return rua1_verde; }); // Rua 1 só continua se for sua vez de estar no verde
+        lock.unlock();
+
+        mudarcores("Rua 1", "VERDE\n", 3);   
+        mudarcores("Rua 1", "AMARELO\n", 2);  
+        mudarcores("Rua 1", "VERMELHO\n", 3);
+
+        lock.lock();
+        rua1_verde = false; // Agora, Rua 2 pode ficar verde
+        lock.unlock();
+        cv.notify_all(); // Notifica Rua 2 para mudar
+    }
+}
+
+void Rua2() {
+    while (true) {
+        std::unique_lock<std::mutex> lock(mtx);
+        cv.wait(lock, [] { return !rua1_verde; }); // Rua 2 só continua se for sua vez de estar no verde
+        lock.unlock();
+
+        mudarcores("Rua 2", "VERDE\n", 3);    
+        mudarcores("Rua 2", "AMARELO\n", 2);  
+        mudarcores("Rua 2", "VERMELHO\n", 3);
+
+        lock.lock();
+        rua1_verde = true; // Agora, Rua 1 pode ficar verde novamente
+        lock.unlock();
+        cv.notify_all(); // Notifica Rua 1 para mudar
+    }
+}
+
+int main() {
+    std::thread t1(Rua1); 
+    std::thread t2(Rua2); 
+
+    t1.join(); 
+    t2.join(); 
+
+    return 0;
+}
